@@ -16,10 +16,16 @@ export default function Modal({ open, onClose, title, children, className }: Mod
   useEffect(() => {
     if (open) {
       document.body.style.overflow = "hidden";
+      // Cache la bottom nav et tout le reste tant que le modal est ouvert
+      document.body.classList.add("modal-open");
     } else {
       document.body.style.overflow = "";
+      document.body.classList.remove("modal-open");
     }
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+      document.body.classList.remove("modal-open");
+    };
   }, [open]);
 
   if (!open) return null;
@@ -36,10 +42,10 @@ export default function Modal({ open, onClose, title, children, className }: Mod
       <div className={cn(
         "relative glass rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg mx-0 sm:mx-4 animate-slide-up",
         "px-5 pt-5",
-        // Mobile : on laisse de la place en bas pour passer au-dessus de la bottom nav (~72px) + safe area iOS
-        "pb-[calc(1.25rem+env(safe-area-inset-bottom)+72px)] sm:pb-5",
-        // Hauteur max : on évite que le modal touche la bottom nav
-        "max-h-[calc(100dvh-80px)] sm:max-h-[90dvh] overflow-y-auto",
+        // Padding bas = safe area iOS + 1.25rem standard
+        "pb-[calc(1.25rem+env(safe-area-inset-bottom))]",
+        // Hauteur max : presque tout l'écran (la nav est cachée)
+        "max-h-[95dvh] overflow-y-auto",
         className
       )}>
         <div className="flex items-center justify-between mb-4">

@@ -36,7 +36,7 @@ export default function HealthClient() {
   const [saving, setSaving] = useState(false);
 
   const [sleepForm, setSleepForm] = useState({ bedtime: "23:00", wake_time: "07:00", duration_h: "8", quality: 3, energy_score: 7 });
-  const [weightForm, setWeightForm] = useState({ weight_kg: "", waist_cm: "" });
+  const [weightForm, setWeightForm] = useState({ weight_kg: "", waist_cm: "", date: todayStr() });
   const [editingSleepId, setEditingSleepId] = useState<number | null>(null);
   const [editingWeightId, setEditingWeightId] = useState<number | null>(null);
 
@@ -97,7 +97,11 @@ export default function HealthClient() {
   const saveWeight = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const body = { weight_kg: parseFloat(weightForm.weight_kg), waist_cm: weightForm.waist_cm ? parseFloat(weightForm.waist_cm) : undefined };
+    const body: any = {
+      weight_kg: parseFloat(weightForm.weight_kg),
+      waist_cm: weightForm.waist_cm ? parseFloat(weightForm.waist_cm) : null,
+      date: weightForm.date || todayStr(),
+    };
     if (editingWeightId) {
       await fetch(`/api/health/weight/${editingWeightId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     } else {
@@ -106,6 +110,7 @@ export default function HealthClient() {
     setSaving(false);
     setShowWeightModal(false);
     setEditingWeightId(null);
+    setWeightForm({ weight_kg: "", waist_cm: "", date: todayStr() });
     load();
   };
 
@@ -171,7 +176,7 @@ export default function HealthClient() {
         action={
           <div className="flex gap-2">
             {tab === "sleep" && <Button size="sm" onClick={() => { setEditingSleepId(null); setSleepForm({ bedtime: "23:00", wake_time: "07:00", duration_h: "8", quality: 3, energy_score: 7 }); setShowSleepModal(true); }}><Plus size={14} /> Log</Button>}
-            {tab === "weight" && <Button size="sm" onClick={() => { setEditingWeightId(null); setWeightForm({ weight_kg: "", waist_cm: "" }); setShowWeightModal(true); }}><Plus size={14} /> Log</Button>}
+            {tab === "weight" && <Button size="sm" onClick={() => { setEditingWeightId(null); setWeightForm({ weight_kg: "", waist_cm: "", date: todayStr() }); setShowWeightModal(true); }}><Plus size={14} /> Log</Button>}
           </div>
         }
       />
@@ -427,7 +432,7 @@ export default function HealthClient() {
                       <button
                         onClick={() => {
                           setEditingWeightId(log.id);
-                          setWeightForm({ weight_kg: log.weight_kg.toString(), waist_cm: log.waist_cm?.toString() || "" });
+                          setWeightForm({ weight_kg: log.weight_kg.toString(), waist_cm: log.waist_cm?.toString() || "", date: log.date || todayStr() });
                           setShowWeightModal(true);
                         }}
                         className="p-1 text-muted hover:text-accent-blue cursor-pointer transition-colors"
@@ -590,6 +595,13 @@ export default function HealthClient() {
       {/* Weight Modal */}
       <Modal open={showWeightModal} onClose={() => { setShowWeightModal(false); setEditingWeightId(null); }} title={editingWeightId ? "Modifier le poids" : "Log Poids"}>
         <form onSubmit={saveWeight} className="space-y-4">
+          <Input
+            label="Date"
+            type="date"
+            value={weightForm.date}
+            onChange={e => setWeightForm(f => ({ ...f, date: e.target.value }))}
+            required
+          />
           <Input label="Poids (kg)" type="number" step="0.1" min="30" max="250" value={weightForm.weight_kg} onChange={e => setWeightForm(f => ({ ...f, weight_kg: e.target.value }))} required placeholder="95.5" />
           <Input label="Tour de taille (cm, optionnel)" type="number" step="0.5" value={weightForm.waist_cm} onChange={e => setWeightForm(f => ({ ...f, waist_cm: e.target.value }))} placeholder="90" />
           <Button type="submit" loading={saving} className="w-full">Enregistrer</Button>

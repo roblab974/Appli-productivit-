@@ -53,6 +53,12 @@ h1, h2, h3 {
   padding-bottom: max(12px, var(--safe-area-inset-bottom));
 }
 
+/* Quand un modal est ouvert : la bottom nav disparaît,
+   seul le modal est visible et interactif */
+body.modal-open .bottom-nav {
+  display: none;
+}
+
 /* Range input */
 input[type="range"] {
   -webkit-appearance: none;
