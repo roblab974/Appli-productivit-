@@ -26,15 +26,20 @@ export default function Modal({ open, onClose, title, children, className }: Mod
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      // z-[60] pour passer au-dessus de la bottom nav (z-50)
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className={cn(
-        "relative glass rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg mx-0 sm:mx-4 p-5 animate-slide-up",
-        "max-h-[90dvh] overflow-y-auto",
+        "relative glass rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg mx-0 sm:mx-4 animate-slide-up",
+        "px-5 pt-5",
+        // Mobile : on laisse de la place en bas pour passer au-dessus de la bottom nav (~72px) + safe area iOS
+        "pb-[calc(1.25rem+env(safe-area-inset-bottom)+72px)] sm:pb-5",
+        // Hauteur max : on évite que le modal touche la bottom nav
+        "max-h-[calc(100dvh-80px)] sm:max-h-[90dvh] overflow-y-auto",
         className
       )}>
         <div className="flex items-center justify-between mb-4">
