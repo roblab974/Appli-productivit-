@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb, { ensureSchema } from "@/lib/db";
+import { requireUserId, withAuth } from "@/lib/auth";
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export const PATCH = withAuth(async (req: NextRequest, { params }: { params: { id: string } }) => {
   await ensureSchema();
+  const userId = await requireUserId();
   const db = getDb();
   const body = await req.json();
   const fields = Object.keys(body).map(k => `${k}=?`).join(", ");
-  await db.prepare(`UPDATE business_goals SET ${fields} WHERE id=?`).run(...(Object.values(body) as any[]), params.id);
-  return NextResponse.json(await db.prepare("SELECT * FROM business_goals WHERE id = ?").get(params.id));
-}
+  await db.prepare(`UPDATE business_goals SET ${fields} WHERE id=? AND user_id=?`).run(...(Object.values(body) as any[]), params.id, userId);
+  return NextResponse.json(await db.prepare("SELECT * FROM business_goals WHERE id = ? AND user_id = ?").get(params.id, userId));
+});
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withAuth(async (_: NextRequest, { params }: { params: { id: string } }) => {
   await ensureSchema();
+  const userId = await requireUserId();
   const db = getDb();
-  await db.prepare("DELETE FROM business_goals WHERE id = ?").run(params.id);
+  await db.prepare("UPDATE kpis SET goal_id = NULL WHERE goal_id = ? AND user_id = ?").run(params.id, userId);
+  await db.prepare("DELETE FROM business_goals WHERE id = ? AND user_id = ?").run(params.id, userId);
   return NextResponse.json({ success: true });
-}
+});

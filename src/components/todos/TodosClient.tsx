@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Plus, CheckCircle2, Circle, Trash2, Timer, Play, Pause, RotateCcw, AlertTriangle, Minus, ChevronDown } from "lucide-react";
+import { Plus, CheckCircle2, Circle, Trash2, Timer, Play, Pause, RotateCcw, AlertTriangle, Minus, ChevronDown, Calendar as CalendarIcon, Edit3 } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -9,7 +9,23 @@ import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Badge from "@/components/ui/Badge";
 import ProgressRing from "@/components/ui/ProgressRing";
+import SelectionToolbar, { SelectCheckbox } from "@/components/ui/SelectionToolbar";
+import { useSelection } from "@/lib/useSelection";
 import { cn, todayStr, pct } from "@/lib/utils";
+import { differenceInDays, parseISO, format } from "date-fns";
+import { fr } from "date-fns/locale";
+
+/** Couleur du contour selon le nombre de jours restants jusqu'à la deadline */
+export function deadlineColor(deadline?: string | null): { border: string; text: string; bg: string; label: string } | null {
+  if (!deadline) return null;
+  try {
+    const days = differenceInDays(parseISO(deadline), new Date());
+    if (days < 3) return { border: "border-accent-red", text: "text-accent-red", bg: "bg-accent-red/10", label: days < 0 ? `En retard ${Math.abs(days)}j` : days === 0 ? "Aujourd'hui" : `Dans ${days}j` };
+    if (days < 5) return { border: "border-accent-orange", text: "text-accent-orange", bg: "bg-accent-orange/10", label: `Dans ${days}j` };
+    if (days < 7) return { border: "border-accent-yellow", text: "text-accent-yellow", bg: "bg-accent-yellow/10", label: `Dans ${days}j` };
+    return { border: "border-accent-green", text: "text-accent-green", bg: "bg-accent-green/10", label: `Dans ${days}j` };
+  } catch { return null; }
+}
 
 type Tab = "tasks" | "pomodoro";
 type Priority = "high" | "medium" | "low";
@@ -31,7 +47,17 @@ export default function TodosClient() {
   const [todos, setTodos] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ title: "", priority: "medium" as Priority, recurring: "" as "" | "daily" | "weekly", recurring_day: "1" });
+  const [form, setForm] = useState({ title: "", priority: "medium" as Priority, recurring: "" as "" | "daily" | "weekly", recurring_day: "1", deadline: "" });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const sel = useSelection<number>();
+
+  const bulkDelete = async () => {
+    if (sel.ids.length === 0) return;
+    if (!confirm(`Supprimer ${sel.ids.length} tâche(s) ?`)) return;
+    await fetch("/api/todos", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: sel.ids }) });
+    sel.exitMode();
+    loadTodos();
+  };
 
   // Pomodoro
   const [pomoDuration, setPomoDuration] = useState(25);
@@ -97,11 +123,35 @@ export default function TodosClient() {
 
   const saveTodo = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    await fetch("/api/todos", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: form.title, priority: form.priority, recurring: form.recurring || undefined, recurring_day: form.recurring === "weekly" ? parseInt(form.recurring_day) : undefined }),
+    const body = {
+      title: form.title,
+      priority: form.priority,
+      recurring: form.recurring || null,
+      recurring_day: form.recurring === "weekly" ? parseInt(form.recurring_day) : null,
+      deadline: form.deadline || null,
+    };
+    if (editingId) {
+      await fetch(`/api/todos/${editingId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } else {
+      await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    }
+    setSaving(false);
+    setShowModal(false);
+    setEditingId(null);
+    setForm({ title: "", priority: "medium", recurring: "", recurring_day: "1", deadline: "" });
+    loadTodos();
+  };
+
+  const startEditTodo = (t: any) => {
+    setEditingId(t.id);
+    setForm({
+      title: t.title,
+      priority: t.priority as Priority,
+      recurring: (t.recurring || "") as "" | "daily" | "weekly",
+      recurring_day: t.recurring_day?.toString() || "1",
+      deadline: t.deadline || "",
     });
-    setSaving(false); setShowModal(false); setForm({ title: "", priority: "medium", recurring: "", recurring_day: "1" }); loadTodos();
+    setShowModal(true);
   };
 
   const sortedTodos = [...todos].sort((a, b) => {
@@ -116,7 +166,7 @@ export default function TodosClient() {
       <PageHeader
         title="Productivité"
         action={tab === "tasks" ? (
-          <Button size="sm" onClick={() => setShowModal(true)}><Plus size={14} /> Tâche</Button>
+          <Button size="sm" onClick={() => { setEditingId(null); setForm({ title: "", priority: "medium", recurring: "", recurring_day: "1", deadline: "" }); setShowModal(true); }}><Plus size={14} /> Tâche</Button>
         ) : undefined}
       />
 
@@ -156,23 +206,39 @@ export default function TodosClient() {
           )}
 
           {/* Task list */}
+          <SelectionToolbar
+            selectionMode={sel.mode}
+            selectedCount={sel.size}
+            totalCount={todos.length}
+            onToggleMode={sel.toggleMode}
+            onSelectAll={() => sel.selectAll(todos.map(t => t.id))}
+            onClear={sel.clear}
+            onDelete={bulkDelete}
+            label="tâche(s)"
+          />
+
           {sortedTodos.length === 0 && (
             <Card><p className="text-center text-foreground-muted text-sm py-6">Aucune tâche pour aujourd'hui</p></Card>
           )}
 
           {sortedTodos.map(todo => {
             const cfg = PRIORITY_CONFIG[todo.priority as Priority];
+            const dl = deadlineColor(todo.deadline);
             return (
               <div
                 key={todo.id}
                 className={cn(
-                  "flex items-center gap-3 p-3 rounded-2xl border transition-all",
+                  "flex items-center gap-3 p-3 rounded-2xl border-2 transition-all",
                   todo.completed
                     ? "bg-surface/50 border-border/30 opacity-60"
-                    : "glass border-border/60",
-                  !todo.completed && todo.priority === "high" && "border-l-2 border-l-accent-red/60"
+                    : "glass",
+                  // Contour deadline (prioritaire sur le contour standard)
+                  !todo.completed && dl ? dl.border : !todo.completed && "border-border/60",
+                  // Indicateur priorité haute (barre gauche) si pas de deadline
+                  !todo.completed && !dl && todo.priority === "high" && "border-l-accent-red/60"
                 )}
               >
+                {sel.mode && <SelectCheckbox checked={sel.isSelected(todo.id)} onChange={() => sel.toggle(todo.id)} />}
                 <button
                   onClick={() => toggleTodo(todo.id, todo.completed)}
                   className="flex-shrink-0 cursor-pointer active:scale-90 transition-transform"
@@ -185,14 +251,28 @@ export default function TodosClient() {
                 </button>
                 <div className="flex-1 min-w-0">
                   <p className={cn("text-sm font-medium", todo.completed && "line-through text-foreground-muted")}>{todo.title}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <Badge variant={cfg.color} className="text-[10px] px-1.5 py-0">{cfg.label}</Badge>
                     {todo.recurring && <Badge variant="muted" className="text-[10px] px-1.5 py-0">{todo.recurring === "daily" ? "Quotidien" : "Hebdo"}</Badge>}
+                    {dl && (
+                      <span className={cn("text-[10px] font-semibold flex items-center gap-1", dl.text)}>
+                        <CalendarIcon size={10} /> {dl.label}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <button onClick={() => deleteTodo(todo.id)} className="p-1.5 text-muted hover:text-accent-red cursor-pointer transition-colors flex-shrink-0">
-                  <Trash2 size={14} />
-                </button>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  <button
+                    onClick={() => startEditTodo(todo)}
+                    className="p-1.5 text-muted hover:text-accent-blue cursor-pointer transition-colors"
+                    aria-label="Modifier"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                  <button onClick={() => deleteTodo(todo.id)} className="p-1.5 text-muted hover:text-accent-red cursor-pointer transition-colors">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -318,7 +398,7 @@ export default function TodosClient() {
       )}
 
       {/* Modal */}
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="Nouvelle tâche">
+      <Modal open={showModal} onClose={() => { setShowModal(false); setEditingId(null); }} title={editingId ? "Modifier la tâche" : "Nouvelle tâche"}>
         <form onSubmit={saveTodo} className="space-y-4">
           <Input label="Tâche" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required placeholder="Que dois-tu faire ?" />
           <div>
@@ -353,7 +433,21 @@ export default function TodosClient() {
               </select>
             </div>
           )}
-          <Button type="submit" loading={saving} className="w-full">Ajouter</Button>
+          <div>
+            <label className="text-sm font-medium text-foreground-muted block mb-2">
+              Deadline (optionnel)
+            </label>
+            <input
+              type="date"
+              value={form.deadline}
+              onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))}
+              className="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-foreground text-sm focus:outline-none focus:border-accent-blue min-h-[44px]"
+            />
+            <p className="text-[10px] text-foreground-muted mt-1">
+              Contour vert &gt; 7j · jaune 5-7j · orange 3-5j · rouge &lt; 3j
+            </p>
+          </div>
+          <Button type="submit" loading={saving} className="w-full">{editingId ? "Enregistrer" : "Ajouter"}</Button>
         </form>
       </Modal>
     </div>

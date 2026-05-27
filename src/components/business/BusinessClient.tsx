@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Briefcase, Plus, Target, TrendingUp, BarChart2, FileText, Trash2, Edit3, Check } from "lucide-react";
+import { Briefcase, Plus, Target, TrendingUp, BarChart2, FileText, Trash2, Edit3, Check, Link2 } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -9,6 +9,8 @@ import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Badge from "@/components/ui/Badge";
 import ProgressRing from "@/components/ui/ProgressRing";
+import SelectionToolbar, { SelectCheckbox } from "@/components/ui/SelectionToolbar";
+import { useSelection } from "@/lib/useSelection";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line, LineChart } from "recharts";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -33,29 +35,52 @@ export default function BusinessClient() {
   const [editingNote, setEditingNote] = useState<any | null>(null);
 
   const [goalForm, setGoalForm] = useState({ title: "", description: "", target_date: "", progress: "0" });
-  const [revenueForm, setRevenueForm] = useState({ year: new Date().getFullYear().toString(), month: (new Date().getMonth() + 1).toString(), amount: "", notes: "" });
-  const [kpiForm, setKpiForm] = useState({ name: "", value: "", unit: "", target: "" });
+  const [editingGoal, setEditingGoal] = useState<any>(null);
+  const [revenueForm, setRevenueForm] = useState({ year: new Date().getFullYear().toString(), month: (new Date().getMonth() + 1).toString(), date: new Date().toISOString().slice(0, 10), amount: "", notes: "", account_id: "" });
+  const [editingRevenue, setEditingRevenue] = useState<any>(null);
+  const [kpiForm, setKpiForm] = useState({ name: "", value: "", unit: "", target: "", goal_id: "" });
+  const [editingKpi, setEditingKpi] = useState<any>(null);
   const [noteForm, setNoteForm] = useState({ content: "", tags: "" });
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const goalsSel = useSelection<number>();
+  const revenueSel = useSelection<number>();
+  const kpisSel = useSelection<number>();
+  const notesSel = useSelection<number>();
+
+  const bulkDel = async (path: string, ids: number[], label: string, onDone: () => void) => {
+    if (ids.length === 0) return;
+    if (!confirm(`Supprimer ${ids.length} ${label} ?`)) return;
+    await fetch(path, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+    onDone();
+    load();
+  };
 
   const load = useCallback(async () => {
-    const [g, r, k, n] = await Promise.all([
+    const [g, r, k, n, acc] = await Promise.all([
       fetch("/api/business/goals").then(r => r.json()),
       fetch("/api/business/revenue").then(r => r.json()),
       fetch("/api/business/kpis").then(r => r.json()),
       fetch("/api/business/notes").then(r => r.json()),
+      fetch("/api/finances/accounts").then(r => r.json()).catch(() => []),
     ]);
     setGoals(g);
     setRevenue(r.reverse());
     setKpis(k);
     setNotes(n);
+    setAccounts(acc);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const saveGoal = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    await fetch("/api/business/goals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...goalForm, progress: parseInt(goalForm.progress) }) });
-    setSaving(false); setShowGoalModal(false); setGoalForm({ title: "", description: "", target_date: "", progress: "0" }); load();
+    const body = { ...goalForm, progress: parseInt(goalForm.progress) };
+    if (editingGoal) {
+      await fetch(`/api/business/goals/${editingGoal.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } else {
+      await fetch("/api/business/goals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    }
+    setSaving(false); setShowGoalModal(false); setEditingGoal(null); setGoalForm({ title: "", description: "", target_date: "", progress: "0" }); load();
   };
 
   const updateGoalProgress = async (id: number, progress: number) => {
@@ -73,14 +98,49 @@ export default function BusinessClient() {
 
   const saveRevenue = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    await fetch("/api/business/revenue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...revenueForm, year: parseInt(revenueForm.year), month: parseInt(revenueForm.month), amount: parseFloat(revenueForm.amount) }) });
-    setSaving(false); setShowRevenueModal(false); load();
+    // La date est la source de vérité, year/month dérivent de la date
+    const parts = revenueForm.date.split("-");
+    const body = {
+      date: revenueForm.date,
+      year: parseInt(parts[0]),
+      month: parseInt(parts[1]),
+      amount: parseFloat(revenueForm.amount),
+      notes: revenueForm.notes,
+      account_id: revenueForm.account_id ? parseInt(revenueForm.account_id) : null,
+    };
+    await fetch("/api/business/revenue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    setSaving(false); setShowRevenueModal(false); setEditingRevenue(null);
+    setRevenueForm({ year: new Date().getFullYear().toString(), month: (new Date().getMonth() + 1).toString(), date: new Date().toISOString().slice(0, 10), amount: "", notes: "", account_id: "" });
+    load();
+  };
+
+  const deleteRevenue = async (id: number) => {
+    if (!confirm("Supprimer ce revenu ? Le compte bancaire sera ajusté.")) return;
+    await fetch(`/api/business/revenue/${id}`, { method: "DELETE" });
+    load();
   };
 
   const saveKpi = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    await fetch("/api/business/kpis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...kpiForm, value: parseFloat(kpiForm.value), target: kpiForm.target ? parseFloat(kpiForm.target) : undefined }) });
-    setSaving(false); setShowKpiModal(false); setKpiForm({ name: "", value: "", unit: "", target: "" }); load();
+    const body: any = {
+      name: kpiForm.name,
+      value: parseFloat(kpiForm.value),
+      unit: kpiForm.unit || null,
+      target: kpiForm.target ? parseFloat(kpiForm.target) : null,
+      goal_id: kpiForm.goal_id ? parseInt(kpiForm.goal_id) : null,
+    };
+    if (editingKpi) {
+      await fetch(`/api/business/kpis/${editingKpi.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } else {
+      await fetch("/api/business/kpis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    }
+    setSaving(false); setShowKpiModal(false); setEditingKpi(null); setKpiForm({ name: "", value: "", unit: "", target: "", goal_id: "" }); load();
+  };
+
+  const deleteKpi = async (id: number) => {
+    if (!confirm("Supprimer ce KPI ?")) return;
+    await fetch(`/api/business/kpis/${id}`, { method: "DELETE" });
+    load();
   };
 
   const saveNote = async (e: React.FormEvent) => {
@@ -165,9 +225,22 @@ export default function BusinessClient() {
             </Card>
           )}
 
-          {goals.map(g => (
+          <SelectionToolbar
+            selectionMode={goalsSel.mode}
+            selectedCount={goalsSel.size}
+            totalCount={goals.length}
+            onToggleMode={goalsSel.toggleMode}
+            onSelectAll={() => goalsSel.selectAll(goals.map(g => g.id))}
+            onClear={goalsSel.clear}
+            onDelete={() => bulkDel("/api/business/goals", goalsSel.ids, "objectif(s)", goalsSel.exitMode)}
+            label="objectif(s)"
+          />
+          {goals.map(g => {
+            const linkedKpisCount = kpis.filter(k => k.goal_id === g.id).length;
+            return (
             <Card key={g.id}>
               <div className="flex items-start gap-3">
+                {goalsSel.mode && <SelectCheckbox checked={goalsSel.isSelected(g.id)} onChange={() => goalsSel.toggle(g.id)} />}
                 <button
                   onClick={() => toggleGoalStatus(g.id, g.status)}
                   className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 cursor-pointer transition-all",
@@ -176,11 +249,16 @@ export default function BusinessClient() {
                   {g.status === "completed" && <Check size={12} className="text-white" />}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className={cn("font-medium text-sm", g.status === "completed" && "line-through text-foreground-muted")}>{g.title}</p>
                     <Badge variant={g.status === "completed" ? "green" : g.status === "paused" ? "muted" : "blue"}>
                       {g.status === "completed" ? "Terminé" : g.status === "paused" ? "Pausé" : "Actif"}
                     </Badge>
+                    {linkedKpisCount > 0 && (
+                      <Badge variant="purple" className="flex items-center gap-1">
+                        <Link2 size={10} /> {linkedKpisCount} KPI{linkedKpisCount > 1 ? "s" : ""}
+                      </Badge>
+                    )}
                   </div>
                   {g.description && <p className="text-xs text-foreground-muted mt-0.5">{g.description}</p>}
                   <div className="flex items-center gap-2 mt-2">
@@ -191,10 +269,23 @@ export default function BusinessClient() {
                   </div>
                   <input type="range" min="0" max="100" value={g.progress} onChange={e => updateGoalProgress(g.id, parseInt(e.target.value))} className="w-full mt-1" aria-label="Progression" />
                 </div>
-                <button onClick={() => deleteGoal(g.id)} className="p-1.5 text-muted hover:text-accent-red cursor-pointer transition-colors"><Trash2 size={14} /></button>
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={() => {
+                      setEditingGoal(g);
+                      setGoalForm({ title: g.title, description: g.description || "", target_date: g.target_date || "", progress: g.progress.toString() });
+                      setShowGoalModal(true);
+                    }}
+                    className="p-1.5 text-muted hover:text-accent-blue cursor-pointer transition-colors"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                  <button onClick={() => deleteGoal(g.id)} className="p-1.5 text-muted hover:text-accent-red cursor-pointer transition-colors"><Trash2 size={14} /></button>
+                </div>
               </div>
             </Card>
-          ))}
+            );
+          })}
 
           {goals.length === 0 && (
             <Card><p className="text-center text-foreground-muted text-sm py-4">Aucun objectif défini</p></Card>
@@ -244,16 +335,59 @@ export default function BusinessClient() {
             </Card>
           )}
 
+          <SelectionToolbar
+            selectionMode={revenueSel.mode}
+            selectedCount={revenueSel.size}
+            totalCount={revenue.length}
+            onToggleMode={revenueSel.toggleMode}
+            onSelectAll={() => revenueSel.selectAll(revenue.map(r => r.id))}
+            onClear={revenueSel.clear}
+            onDelete={() => bulkDel("/api/business/revenue", revenueSel.ids, "revenu(s)", revenueSel.exitMode)}
+            label="revenu(s)"
+          />
           <div className="space-y-2">
-            {revenue.slice().reverse().slice(0, 12).map(r => (
-              <Card key={r.id}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{MONTHS[r.month - 1]} {r.year}</span>
-                  <span className="font-heading text-lg font-bold text-accent-green">{r.amount.toLocaleString("fr-FR")} €</span>
-                </div>
-                {r.notes && <p className="text-xs text-foreground-muted mt-1">{r.notes}</p>}
-              </Card>
-            ))}
+            {revenue.slice().reverse().slice(0, 12).map(r => {
+              const acc = accounts.find(a => a.id === r.account_id);
+              return (
+                <Card key={r.id}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {revenueSel.mode && <SelectCheckbox checked={revenueSel.isSelected(r.id)} onChange={() => revenueSel.toggle(r.id)} />}
+                      <div>
+                        <span className="text-sm font-medium">
+                          {r.date ? format(parseISO(r.date), "dd MMM yyyy", { locale: fr }) : `${MONTHS[r.month - 1]} ${r.year}`}
+                        </span>
+                        {acc && <span className="text-[10px] text-foreground-muted block">→ {acc.name}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-heading text-lg font-bold text-accent-green">{r.amount.toLocaleString("fr-FR")} €</span>
+                      <button
+                        onClick={() => {
+                          setEditingRevenue(r);
+                          setRevenueForm({
+                            year: r.year.toString(),
+                            month: r.month.toString(),
+                            date: r.date || `${r.year}-${String(r.month).padStart(2, "0")}-01`,
+                            amount: r.amount.toString(),
+                            notes: r.notes || "",
+                            account_id: r.account_id?.toString() || "",
+                          });
+                          setShowRevenueModal(true);
+                        }}
+                        className="p-1.5 text-muted hover:text-accent-blue cursor-pointer transition-colors"
+                      >
+                        <Edit3 size={13} />
+                      </button>
+                      <button onClick={() => deleteRevenue(r.id)} className="p-1.5 text-muted hover:text-accent-red cursor-pointer transition-colors">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                  {r.notes && <p className="text-xs text-foreground-muted mt-1">{r.notes}</p>}
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}
@@ -261,12 +395,24 @@ export default function BusinessClient() {
       {/* KPIs */}
       {tab === "kpis" && (
         <div className="space-y-3 animate-fade-in">
+          <SelectionToolbar
+            selectionMode={kpisSel.mode}
+            selectedCount={kpisSel.size}
+            totalCount={kpis.length}
+            onToggleMode={kpisSel.toggleMode}
+            onSelectAll={() => kpisSel.selectAll(kpis.map(k => k.id))}
+            onClear={kpisSel.clear}
+            onDelete={() => bulkDel("/api/business/kpis", kpisSel.ids, "KPI(s)", kpisSel.exitMode)}
+            label="KPI(s)"
+          />
           {kpis.length === 0 && <Card><p className="text-center text-foreground-muted text-sm py-4">Aucun KPI défini</p></Card>}
           {kpis.map(kpi => {
             const pct = kpi.target ? Math.round((kpi.value / kpi.target) * 100) : null;
+            const linkedGoal = goals.find(g => g.id === kpi.goal_id);
             return (
               <Card key={kpi.id}>
                 <div className="flex items-center gap-3">
+                  {kpisSel.mode && <SelectCheckbox checked={kpisSel.isSelected(kpi.id)} onChange={() => kpisSel.toggle(kpi.id)} />}
                   {pct !== null ? (
                     <ProgressRing value={kpi.value} max={kpi.target} size={56} strokeWidth={5} color="#3B82F6">
                       <span className="text-[10px] font-bold text-accent-blue">{pct}%</span>
@@ -283,6 +429,27 @@ export default function BusinessClient() {
                       {kpi.unit && <span className="text-foreground-muted text-sm">{kpi.unit}</span>}
                       {kpi.target && <span className="text-foreground-muted text-xs">/ {kpi.target.toLocaleString("fr-FR")}</span>}
                     </div>
+                    {linkedGoal && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <Link2 size={10} className="text-accent-purple" />
+                        <span className="text-[10px] text-accent-purple truncate">→ {linkedGoal.title}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => {
+                        setEditingKpi(kpi);
+                        setKpiForm({ name: kpi.name, value: kpi.value.toString(), unit: kpi.unit || "", target: kpi.target?.toString() || "", goal_id: kpi.goal_id?.toString() || "" });
+                        setShowKpiModal(true);
+                      }}
+                      className="p-1.5 text-muted hover:text-accent-blue cursor-pointer transition-colors"
+                    >
+                      <Edit3 size={13} />
+                    </button>
+                    <button onClick={() => deleteKpi(kpi.id)} className="p-1.5 text-muted hover:text-accent-red cursor-pointer transition-colors">
+                      <Trash2 size={13} />
+                    </button>
                   </div>
                 </div>
               </Card>
@@ -294,9 +461,22 @@ export default function BusinessClient() {
       {/* NOTES */}
       {tab === "notes" && (
         <div className="space-y-3 animate-fade-in">
+          <SelectionToolbar
+            selectionMode={notesSel.mode}
+            selectedCount={notesSel.size}
+            totalCount={notes.length}
+            onToggleMode={notesSel.toggleMode}
+            onSelectAll={() => notesSel.selectAll(notes.map(n => n.id))}
+            onClear={notesSel.clear}
+            onDelete={() => bulkDel("/api/business/notes", notesSel.ids, "note(s)", notesSel.exitMode)}
+            label="note(s)"
+          />
           {notes.length === 0 && <Card><p className="text-center text-foreground-muted text-sm py-4">Aucune note</p></Card>}
           {notes.map(note => (
             <Card key={note.id}>
+              {notesSel.mode && (
+                <div className="mb-2"><SelectCheckbox checked={notesSel.isSelected(note.id)} onChange={() => notesSel.toggle(note.id)} /></div>
+              )}
               <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{note.content}</p>
               <div className="flex items-center justify-between mt-3">
                 <div className="flex gap-1 flex-wrap">
@@ -323,7 +503,7 @@ export default function BusinessClient() {
       )}
 
       {/* MODALS */}
-      <Modal open={showGoalModal} onClose={() => setShowGoalModal(false)} title="Nouvel objectif">
+      <Modal open={showGoalModal} onClose={() => { setShowGoalModal(false); setEditingGoal(null); }} title={editingGoal ? "Modifier l'objectif" : "Nouvel objectif"}>
         <form onSubmit={saveGoal} className="space-y-4">
           <Input label="Titre" value={goalForm.title} onChange={e => setGoalForm(f => ({ ...f, title: e.target.value }))} required placeholder="Ex: Atteindre 10k€/mois" />
           <Input label="Description" value={goalForm.description} onChange={e => setGoalForm(f => ({ ...f, description: e.target.value }))} placeholder="Détails..." />
@@ -336,31 +516,58 @@ export default function BusinessClient() {
         </form>
       </Modal>
 
-      <Modal open={showRevenueModal} onClose={() => setShowRevenueModal(false)} title="Log Revenus">
+      <Modal open={showRevenueModal} onClose={() => { setShowRevenueModal(false); setEditingRevenue(null); }} title={editingRevenue ? "Modifier le revenu" : "Log Revenus"}>
         <form onSubmit={saveRevenue} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium text-foreground-muted block mb-1">Mois</label>
-              <select value={revenueForm.month} onChange={e => setRevenueForm(f => ({ ...f, month: e.target.value }))} className="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-foreground text-sm focus:outline-none focus:border-accent-blue min-h-[44px]">
-                {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-              </select>
-            </div>
-            <Input label="Année" type="number" value={revenueForm.year} onChange={e => setRevenueForm(f => ({ ...f, year: e.target.value }))} />
-          </div>
+          <Input
+            label="Date du revenu"
+            type="date"
+            value={revenueForm.date}
+            onChange={e => setRevenueForm(f => ({ ...f, date: e.target.value }))}
+            required
+          />
+          <p className="text-[11px] text-foreground-muted -mt-3">
+            Un seul revenu par mois est conservé (la nouvelle entrée remplace celle du même mois).
+          </p>
           <Input label="Montant (€)" type="number" step="0.01" value={revenueForm.amount} onChange={e => setRevenueForm(f => ({ ...f, amount: e.target.value }))} required placeholder="1500.00" />
+          <div>
+            <label className="text-sm font-medium text-foreground-muted block mb-1">Compte bancaire crédité</label>
+            <select value={revenueForm.account_id} onChange={e => setRevenueForm(f => ({ ...f, account_id: e.target.value }))} className="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-foreground text-sm min-h-[44px] focus:outline-none focus:border-accent-blue">
+              <option value="">— Aucun (n'affecte pas le patrimoine) —</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.balance.toLocaleString("fr-FR")} {a.currency})</option>)}
+            </select>
+            {accounts.length === 0 && <p className="text-xs text-accent-amber mt-1">Ajoute un compte dans Finances → Patrimoine pour lier ce revenu.</p>}
+          </div>
           <Input label="Notes" value={revenueForm.notes} onChange={e => setRevenueForm(f => ({ ...f, notes: e.target.value }))} placeholder="Source des revenus..." />
           <Button type="submit" loading={saving} className="w-full">Enregistrer</Button>
         </form>
       </Modal>
 
-      <Modal open={showKpiModal} onClose={() => setShowKpiModal(false)} title="Nouveau KPI">
+      <Modal open={showKpiModal} onClose={() => { setShowKpiModal(false); setEditingKpi(null); }} title={editingKpi ? "Modifier le KPI" : "Nouveau KPI"}>
         <form onSubmit={saveKpi} className="space-y-4">
           <Input label="Nom" value={kpiForm.name} onChange={e => setKpiForm(f => ({ ...f, name: e.target.value }))} required placeholder="Ex: Clients actifs" />
           <div className="grid grid-cols-2 gap-3">
             <Input label="Valeur" type="number" value={kpiForm.value} onChange={e => setKpiForm(f => ({ ...f, value: e.target.value }))} required />
             <Input label="Unité" value={kpiForm.unit} onChange={e => setKpiForm(f => ({ ...f, unit: e.target.value }))} placeholder="€, clients, %" />
           </div>
-          <Input label="Objectif (optionnel)" type="number" value={kpiForm.target} onChange={e => setKpiForm(f => ({ ...f, target: e.target.value }))} />
+          <Input label="Cible (target)" type="number" value={kpiForm.target} onChange={e => setKpiForm(f => ({ ...f, target: e.target.value }))} placeholder="Optionnel" />
+          <div>
+            <label className="text-sm font-medium text-foreground-muted block mb-1">Lié à un objectif (optionnel)</label>
+            <select
+              value={kpiForm.goal_id}
+              onChange={e => setKpiForm(f => ({ ...f, goal_id: e.target.value }))}
+              className="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-foreground text-sm min-h-[44px] focus:outline-none focus:border-accent-blue"
+            >
+              <option value="">— Aucun —</option>
+              {goals.filter(g => g.status !== "completed").map(g => (
+                <option key={g.id} value={g.id}>{g.title}</option>
+              ))}
+            </select>
+            {kpiForm.goal_id && (
+              <p className="text-[11px] text-accent-purple mt-1.5 flex items-center gap-1">
+                <Link2 size={10} /> La progression de cet objectif sera mise à jour automatiquement en fonction de la valeur du KPI.
+              </p>
+            )}
+          </div>
           <Button type="submit" loading={saving} className="w-full">Enregistrer</Button>
         </form>
       </Modal>

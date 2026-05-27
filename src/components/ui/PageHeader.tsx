@@ -9,7 +9,7 @@ interface PageHeaderProps {
 
 export default function PageHeader({ title, subtitle, action, className }: PageHeaderProps) {
   return (
-    <div className={cn("flex items-center justify-between px-4 pt-12 pb-4", className)}>
+    <div className={cn("flex items-center justify-between pt-12 pb-4", className)}>
       <div>
         <h1 className="font-heading text-2xl font-bold text-foreground">{title}</h1>
         {subtitle && <p className="text-sm text-foreground-muted mt-0.5">{subtitle}</p>}

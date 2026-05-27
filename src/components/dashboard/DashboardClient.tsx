@@ -1,23 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Flame, Droplets, Dumbbell, Moon, CheckSquare, Briefcase, TrendingUp, Quote, Zap } from "lucide-react";
+import { Flame, Droplets, Dumbbell, Moon, CheckSquare, Briefcase, TrendingUp, Quote, Zap, AlertTriangle, Calendar as CalendarIcon } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import ProgressRing from "@/components/ui/ProgressRing";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { deadlineColor } from "@/components/todos/TodosClient";
 
 interface DashboardData {
   today: string;
   score: number;
   globalStreak: number;
   quote: { text: string; author: string };
-  workout: { done: boolean; streak: number; weekSessions: number };
+  workout: { done: boolean; streak: number; weekSessions: number; weeklyGoal?: number };
   sleep: { ok: boolean; data: { duration_h: number; quality: number } | null };
-  water: { ok: boolean; glasses: number; goal: number };
+  water: { ok: boolean; glasses: number; goal: number; volume_ml?: number; goal_ml?: number };
   tasks: { pct: number; total: number; completed: number };
   weight: number | null;
+  weightGoal?: number;
   mainGoal: { title: string; progress: number } | null;
+  urgentTasks?: Array<{ id: number; title: string; priority: string; deadline: string; daysLeft: number }>;
 }
 
 function ScoreColor(score: number) {
@@ -92,6 +95,39 @@ export default function DashboardClient() {
         </div>
       </Card>
 
+      {/* Tâches urgentes (deadline ≤ 3 jours) */}
+      {data.urgentTasks && data.urgentTasks.length > 0 && (
+        <Card glow="green" className="border border-accent-red/30">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={16} className="text-accent-red animate-pulse" />
+              <CardTitle className="text-accent-red">Urgent</CardTitle>
+            </div>
+            <Link href="/todos" className="text-[10px] text-foreground-muted hover:text-foreground transition-colors">
+              Voir tout →
+            </Link>
+          </CardHeader>
+          <div className="space-y-2">
+            {data.urgentTasks.map(t => {
+              const dl = deadlineColor(t.deadline);
+              return (
+                <Link key={t.id} href="/todos" className={cn(
+                  "flex items-center gap-3 p-2.5 rounded-xl border-2 transition-all cursor-pointer hover:scale-[1.01] active:scale-100",
+                  dl?.border,
+                  dl?.bg
+                )}>
+                  <CalendarIcon size={14} className={dl?.text} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{t.title}</p>
+                  </div>
+                  <span className={cn("text-xs font-bold", dl?.text)}>{dl?.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Quick stats grid */}
       <div className="grid grid-cols-2 gap-3">
 
@@ -105,7 +141,7 @@ export default function DashboardClient() {
             <div className="mt-1">
               <div className="flex items-baseline gap-1">
                 <span className="font-heading text-3xl font-bold text-accent-blue">{data.workout.weekSessions}</span>
-                <span className="text-foreground-muted text-sm">/3 sem.</span>
+                <span className="text-foreground-muted text-sm">/{data.workout.weeklyGoal || 3} sem.</span>
               </div>
               {data.workout.streak > 0 && (
                 <div className="flex items-center gap-1 mt-1">
@@ -170,7 +206,7 @@ export default function DashboardClient() {
                     <span className="font-heading text-3xl font-bold text-accent-purple">{data.weight}</span>
                     <span className="text-foreground-muted text-sm">kg</span>
                   </div>
-                  <span className="text-xs text-foreground-muted">Objectif: 92 kg</span>
+                  <span className="text-xs text-foreground-muted">Objectif: {data.weightGoal || 80} kg</span>
                 </>
               ) : (
                 <span className="text-sm text-foreground-muted">Pas de données</span>

@@ -10,6 +10,7 @@
     "db:seed": "npx tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@clerk/nextjs": "^5.7.5",
     "@libsql/client": "^0.17.3",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",

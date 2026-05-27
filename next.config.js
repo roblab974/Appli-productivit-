@@ -21,7 +21,17 @@ const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
   experimental: {
-    serverComponentsExternalPackages: [],
+    serverComponentsExternalPackages: ["node:sqlite"],
+  },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // node:sqlite est un module intégré Node.js 22+ — ne pas bundler avec webpack
+      config.externals = [
+        ...(Array.isArray(config.externals) ? config.externals : []),
+        "node:sqlite",
+      ];
+    }
+    return config;
   },
 };
 

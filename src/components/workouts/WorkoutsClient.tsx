@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Flame, Calendar, TrendingUp, Dumbbell, Timer, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { Plus, Flame, Calendar, TrendingUp, Dumbbell, Timer, ChevronDown, ChevronUp, Trash2, Edit3, Copy, Settings as SettingsIcon } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Badge from "@/components/ui/Badge";
+import SelectionToolbar, { SelectCheckbox } from "@/components/ui/SelectionToolbar";
+import { useSelection } from "@/lib/useSelection";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -35,40 +37,119 @@ export default function WorkoutsClient() {
   const [form, setForm] = useState({ type: "musculation", duration_min: "45", notes: "" });
   const [exercises, setExercises] = useState([{ name: "", sets: "", reps: "", weight_kg: "" }]);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [weeklyGoal, setWeeklyGoal] = useState(3);
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [goalInput, setGoalInput] = useState("3");
+  const sel = useSelection<number>();
+
+  const bulkDelete = async () => {
+    if (sel.ids.length === 0) return;
+    if (!confirm(`Supprimer ${sel.ids.length} séance(s) ?`)) return;
+    await fetch("/api/workouts", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: sel.ids }),
+    });
+    sel.exitMode();
+    load();
+  };
 
   const load = async () => {
-    const [wRes, sRes] = await Promise.all([fetch("/api/workouts"), fetch("/api/workouts/stats")]);
+    const [wRes, sRes, gRes] = await Promise.all([
+      fetch("/api/workouts"),
+      fetch("/api/workouts/stats"),
+      fetch("/api/workouts/settings"),
+    ]);
     setWorkouts(await wRes.json());
     setStats(await sRes.json());
+    const settings = await gRes.json();
+    setWeeklyGoal(settings.weekly_goal || 3);
+    setGoalInput((settings.weekly_goal || 3).toString());
+  };
+
+  const saveWeeklyGoal = async () => {
+    const v = parseInt(goalInput);
+    if (!v || v < 1 || v > 14) return;
+    await fetch("/api/workouts/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ weekly_goal: v }),
+    });
+    setWeeklyGoal(v);
+    setShowGoalModal(false);
   };
   useEffect(() => { load(); }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await fetch("/api/workouts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...form,
-        duration_min: parseInt(form.duration_min),
-        exercises: exercises.filter(ex => ex.name).map(ex => ({
-          name: ex.name,
-          sets: ex.sets ? parseInt(ex.sets) : undefined,
-          reps: ex.reps ? parseInt(ex.reps) : undefined,
-          weight_kg: ex.weight_kg ? parseFloat(ex.weight_kg) : undefined,
-        })),
-      }),
-    });
+    const body = {
+      ...form,
+      duration_min: parseInt(form.duration_min),
+      exercises: exercises.filter(ex => ex.name).map(ex => ({
+        name: ex.name,
+        sets: ex.sets ? parseInt(ex.sets) : undefined,
+        reps: ex.reps ? parseInt(ex.reps) : undefined,
+        weight_kg: ex.weight_kg ? parseFloat(ex.weight_kg) : undefined,
+      })),
+    };
+    if (editingId) {
+      await fetch(`/api/workouts/${editingId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } else {
+      await fetch("/api/workouts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    }
     setSaving(false);
     setShowForm(false);
+    setEditingId(null);
     setForm({ type: "musculation", duration_min: "45", notes: "" });
     setExercises([{ name: "", sets: "", reps: "", weight_kg: "" }]);
     load();
   };
 
+  const startEdit = (w: Workout) => {
+    setEditingId(w.id);
+    setForm({ type: w.type, duration_min: w.duration_min.toString(), notes: w.notes || "" });
+    setExercises(
+      w.exercises && w.exercises.length > 0
+        ? w.exercises.map(ex => ({
+            name: ex.name,
+            sets: ex.sets?.toString() || "",
+            reps: ex.reps?.toString() || "",
+            weight_kg: ex.weight_kg?.toString() || "",
+          }))
+        : [{ name: "", sets: "", reps: "", weight_kg: "" }]
+    );
+    setShowForm(true);
+  };
+
   const deleteWorkout = async (id: number) => {
+    if (!confirm("Supprimer cette séance ?")) return;
     await fetch(`/api/workouts/${id}`, { method: "DELETE" });
+    load();
+  };
+
+  const duplicateWorkout = async (w: Workout, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    // Récupère les exercices à jour si pas inclus
+    const full = w.exercises ? w : await fetch(`/api/workouts/${w.id}`).then(r => r.json());
+    const body = {
+      type: full.type,
+      duration_min: full.duration_min,
+      notes: full.notes || undefined,
+      // Date du jour par défaut
+      exercises: (full.exercises || []).map((ex: any) => ({
+        name: ex.name,
+        sets: ex.sets,
+        reps: ex.reps,
+        weight_kg: ex.weight_kg,
+      })),
+    };
+    await fetch("/api/workouts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
     load();
   };
 
@@ -80,9 +161,9 @@ export default function WorkoutsClient() {
     <div className="px-4 pb-4 max-w-lg mx-auto">
       <PageHeader
         title="Workouts"
-        subtitle={stats ? `${stats.thisWeekSessions}/3 cette semaine` : ""}
+        subtitle={stats ? `${stats.thisWeekSessions}/${weeklyGoal} cette semaine` : ""}
         action={
-          <Button size="sm" onClick={() => setShowForm(true)}>
+          <Button size="sm" onClick={() => { setEditingId(null); setForm({ type: "musculation", duration_min: "45", notes: "" }); setExercises([{ name: "", sets: "", reps: "", weight_kg: "" }]); setShowForm(true); }}>
             <Plus size={16} /> Log
           </Button>
         }
@@ -113,14 +194,24 @@ export default function WorkoutsClient() {
       {stats && (
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle>Objectif hebdo</CardTitle>
-            <span className="text-xs text-foreground-muted">{stats.thisWeekSessions}/3 séances</span>
+            <div className="flex items-center gap-2">
+              <CardTitle>Objectif hebdo</CardTitle>
+              <button
+                onClick={() => { setGoalInput(weeklyGoal.toString()); setShowGoalModal(true); }}
+                className="text-muted hover:text-accent-blue cursor-pointer transition-colors"
+                aria-label="Modifier l'objectif"
+                title="Modifier l'objectif hebdo"
+              >
+                <SettingsIcon size={12} />
+              </button>
+            </div>
+            <span className="text-xs text-foreground-muted">{stats.thisWeekSessions}/{weeklyGoal} séances</span>
           </CardHeader>
-          <div className="flex gap-2">
-            {[1, 2, 3].map(i => (
+          <div className="flex gap-1.5">
+            {Array.from({ length: weeklyGoal }, (_, i) => (
               <div key={i} className={cn(
                 "h-2 flex-1 rounded-full transition-all duration-500",
-                i <= stats.thisWeekSessions ? "bg-gradient-accent" : "bg-surface-2"
+                i < stats.thisWeekSessions ? "bg-gradient-accent" : "bg-surface-2"
               )} />
             ))}
           </div>
@@ -185,6 +276,18 @@ export default function WorkoutsClient() {
       {/* Recent workouts */}
       <div className="space-y-3">
         <h2 className="font-heading text-base font-semibold text-foreground-muted uppercase tracking-wider">Historique</h2>
+
+        <SelectionToolbar
+          selectionMode={sel.mode}
+          selectedCount={sel.size}
+          totalCount={workouts.length}
+          onToggleMode={sel.toggleMode}
+          onSelectAll={() => sel.selectAll(workouts.map(w => w.id))}
+          onClear={sel.clear}
+          onDelete={bulkDelete}
+          label="séance(s)"
+        />
+
         {workouts.length === 0 && (
           <Card><p className="text-center text-foreground-muted text-sm py-4">Aucune séance loggée</p></Card>
         )}
@@ -192,8 +295,9 @@ export default function WorkoutsClient() {
           const typeInfo = WORKOUT_TYPES.find(t => t.value === w.type) || WORKOUT_TYPES[2];
           const expanded = expandedId === w.id;
           return (
-            <Card key={w.id} className="cursor-pointer" onClick={() => setExpandedId(expanded ? null : w.id)}>
+            <Card key={w.id} className="cursor-pointer" onClick={() => sel.mode ? sel.toggle(w.id) : setExpandedId(expanded ? null : w.id)}>
               <div className="flex items-center gap-3">
+                {sel.mode && <SelectCheckbox checked={sel.isSelected(w.id)} onChange={() => sel.toggle(w.id)} />}
                 <div className="w-10 h-10 rounded-xl bg-accent-blue/10 flex items-center justify-center flex-shrink-0">
                   <Dumbbell size={18} className="text-accent-blue" />
                 </div>
@@ -213,14 +317,29 @@ export default function WorkoutsClient() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   {expanded ? <ChevronUp size={16} className="text-foreground-muted" /> : <ChevronDown size={16} className="text-foreground-muted" />}
+                  <button
+                    className="p-1.5 rounded-lg hover:bg-accent-green/10 text-muted hover:text-accent-green transition-colors cursor-pointer"
+                    onClick={e => duplicateWorkout(w, e)}
+                    aria-label="Dupliquer (refaire aujourd'hui)"
+                    title="Refaire aujourd'hui"
+                  >
+                    <Copy size={13} />
+                  </button>
+                  <button
+                    className="p-1.5 rounded-lg hover:bg-accent-blue/10 text-muted hover:text-accent-blue transition-colors cursor-pointer"
+                    onClick={e => { e.stopPropagation(); startEdit(w); }}
+                    aria-label="Modifier"
+                  >
+                    <Edit3 size={13} />
+                  </button>
                   <button
                     className="p-1.5 rounded-lg hover:bg-accent-red/10 text-muted hover:text-accent-red transition-colors cursor-pointer"
                     onClick={e => { e.stopPropagation(); deleteWorkout(w.id); }}
                     aria-label="Supprimer"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={13} />
                   </button>
                 </div>
               </div>
@@ -242,8 +361,27 @@ export default function WorkoutsClient() {
         })}
       </div>
 
+      {/* Goal modal */}
+      <Modal open={showGoalModal} onClose={() => setShowGoalModal(false)} title="Objectif hebdomadaire">
+        <div className="space-y-4">
+          <p className="text-sm text-foreground-muted">
+            Nombre de séances de sport à atteindre par semaine.
+          </p>
+          <Input
+            label="Séances par semaine"
+            type="number"
+            min="1"
+            max="14"
+            value={goalInput}
+            onChange={e => setGoalInput(e.target.value)}
+            required
+          />
+          <Button onClick={saveWeeklyGoal} className="w-full">Enregistrer</Button>
+        </div>
+      </Modal>
+
       {/* Log modal */}
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nouvelle séance">
+      <Modal open={showForm} onClose={() => { setShowForm(false); setEditingId(null); }} title={editingId ? "Modifier la séance" : "Nouvelle séance"}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-sm font-medium text-foreground-muted block mb-2">Type</label>

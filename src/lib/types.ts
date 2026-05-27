@@ -114,3 +114,96 @@ export interface DayScore {
   water: boolean;
   total: number;
 }
+
+// ─── FINANCES ─────────────────────────────────────────────────────────────────
+
+export type Currency = "EUR" | "USD" | "GBP" | "CHF" | "MUR" | "AED";
+
+export interface BankAccount {
+  id: number;
+  name: string;
+  balance: number;
+  currency: Currency;
+  type: string;
+  created_at: string;
+}
+
+export interface Stock {
+  id: number;
+  ticker: string;
+  name?: string;
+  quantity: number;
+  avg_price?: number;
+  current_price?: number;
+  currency: string;
+  last_updated?: string;
+}
+
+export interface Crypto {
+  id: number;
+  symbol: string;
+  coin_id?: string;
+  name?: string;
+  quantity: number;
+  avg_price?: number;
+  current_price?: number;
+  currency: string;
+  last_updated?: string;
+}
+
+export interface OtherAsset {
+  id: number;
+  name: string;
+  value: number;
+  currency: Currency;
+  category?: string;
+  notes?: string;
+}
+
+export interface Subscription {
+  id: number;
+  name: string;
+  amount: number;
+  currency: Currency;
+  frequency: "weekly" | "monthly" | "annual";
+  account_id?: number;
+  due_date: string;
+  auto_deduct: number;
+  active: number;
+  last_deducted_at?: string;
+}
+
+export interface Purchase {
+  id: number;
+  name: string;
+  amount: number;
+  currency: Currency;
+  account_id?: number;
+  purchase_date: string;
+  deducted: number;
+  deducted_at?: string;
+  notes?: string;
+}
+
+export interface WishlistItem {
+  id: number;
+  name: string;
+  amount: number;
+  currency: Currency;
+  notes?: string;
+  priority: number;
+  created_at: string;
+}
+
+export interface Transaction {
+  id: number;
+  account_id?: number;
+  amount: number;
+  type: "income" | "subscription" | "purchase" | "manual";
+  description?: string;
+  source_id?: number;
+  source_type?: string;
+  date: string;
+  account_name?: string;
+  account_currency?: string;
+}
