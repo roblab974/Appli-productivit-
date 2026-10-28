@@ -82,8 +82,11 @@ export const GET = withAuth(async () => {
   const urgentRaw = (await db.prepare(`
     SELECT * FROM todos
     WHERE user_id = ? AND deadline IS NOT NULL AND completed = 0
+      AND NOT (recurring IS NOT NULL AND EXISTS (
+        SELECT 1 FROM task_completions tc WHERE tc.todo_id = todos.id AND tc.date = ?
+      ))
     ORDER BY deadline ASC LIMIT 50
-  `).all(userId)) as any[];
+  `).all(userId, today)) as any[];
   const urgentTasks = urgentRaw
     .map(t => {
       try {

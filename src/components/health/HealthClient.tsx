@@ -19,6 +19,20 @@ import { todayStr } from "@/lib/utils";
 
 type Tab = "sleep" | "weight" | "water";
 
+// Durée en heures entre coucher et lever (HH:MM), en passant minuit si besoin
+function sleepDuration(bedtime: string, wakeTime: string): number {
+  const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + (m || 0); };
+  if (!bedtime || !wakeTime) return 0;
+  let diff = toMin(wakeTime) - toMin(bedtime);
+  if (diff <= 0) diff += 24 * 60;
+  return Math.round((diff / 60) * 100) / 100;
+}
+
+function formatSleepDuration(hours: number): string {
+  const total = Math.round(hours * 60);
+  return `${Math.floor(total / 60)}h${String(total % 60).padStart(2, "0")}`;
+}
+
 export default function HealthClient() {
   const [tab, setTab] = useState<Tab>("sleep");
   const [sleepLogs, setSleepLogs] = useState<any[]>([]);
@@ -35,7 +49,7 @@ export default function HealthClient() {
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [sleepForm, setSleepForm] = useState({ bedtime: "23:00", wake_time: "07:00", duration_h: "8", quality: 3, energy_score: 7 });
+  const [sleepForm, setSleepForm] = useState({ bedtime: "23:00", wake_time: "07:00", quality: 3, energy_score: 7 });
   const [weightForm, setWeightForm] = useState({ weight_kg: "", waist_cm: "", date: todayStr() });
   const [editingSleepId, setEditingSleepId] = useState<number | null>(null);
   const [editingWeightId, setEditingWeightId] = useState<number | null>(null);
@@ -76,7 +90,7 @@ export default function HealthClient() {
   const saveSleep = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const body = { ...sleepForm, duration_h: parseFloat(sleepForm.duration_h) };
+    const body = { ...sleepForm, duration_h: sleepDuration(sleepForm.bedtime, sleepForm.wake_time) };
     if (editingSleepId) {
       await fetch(`/api/sleep/${editingSleepId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     } else {
@@ -175,7 +189,7 @@ export default function HealthClient() {
         title="Santé"
         action={
           <div className="flex gap-2">
-            {tab === "sleep" && <Button size="sm" onClick={() => { setEditingSleepId(null); setSleepForm({ bedtime: "23:00", wake_time: "07:00", duration_h: "8", quality: 3, energy_score: 7 }); setShowSleepModal(true); }}><Plus size={14} /> Log</Button>}
+            {tab === "sleep" && <Button size="sm" onClick={() => { setEditingSleepId(null); setSleepForm({ bedtime: "23:00", wake_time: "07:00", quality: 3, energy_score: 7 }); setShowSleepModal(true); }}><Plus size={14} /> Log</Button>}
             {tab === "weight" && <Button size="sm" onClick={() => { setEditingWeightId(null); setWeightForm({ weight_kg: "", waist_cm: "", date: todayStr() }); setShowWeightModal(true); }}><Plus size={14} /> Log</Button>}
           </div>
         }
@@ -272,7 +286,7 @@ export default function HealthClient() {
                       <button
                         onClick={() => {
                           setEditingSleepId(log.id);
-                          setSleepForm({ bedtime: log.bedtime || "23:00", wake_time: log.wake_time || "07:00", duration_h: log.duration_h.toString(), quality: log.quality, energy_score: log.energy_score || 7 });
+                          setSleepForm({ bedtime: log.bedtime || "23:00", wake_time: log.wake_time || "07:00", quality: log.quality, energy_score: log.energy_score || 7 });
                           setShowSleepModal(true);
                         }}
                         className="p-1 text-muted hover:text-accent-blue cursor-pointer transition-colors"
@@ -579,7 +593,10 @@ export default function HealthClient() {
             <Input label="Coucher" type="time" value={sleepForm.bedtime} onChange={e => setSleepForm(f => ({ ...f, bedtime: e.target.value }))} />
             <Input label="Lever" type="time" value={sleepForm.wake_time} onChange={e => setSleepForm(f => ({ ...f, wake_time: e.target.value }))} />
           </div>
-          <Input label="Durée (heures)" type="number" step="0.5" min="1" max="14" value={sleepForm.duration_h} onChange={e => setSleepForm(f => ({ ...f, duration_h: e.target.value }))} required />
+          <div className="flex items-center justify-between bg-surface-2 rounded-xl px-3 py-2.5">
+            <span className="text-sm font-medium text-foreground-muted">Durée</span>
+            <span className="font-heading text-lg font-bold text-accent-purple">{formatSleepDuration(sleepDuration(sleepForm.bedtime, sleepForm.wake_time))}</span>
+          </div>
           <div>
             <label className="text-sm font-medium text-foreground-muted block mb-2">Qualité</label>
             <StarRating value={sleepForm.quality} onChange={q => setSleepForm(f => ({ ...f, quality: q }))} size={28} />

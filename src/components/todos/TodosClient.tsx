@@ -254,6 +254,7 @@ export default function TodosClient() {
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <Badge variant={cfg.color} className="text-[10px] px-1.5 py-0">{cfg.label}</Badge>
                     {todo.recurring && <Badge variant="muted" className="text-[10px] px-1.5 py-0">{todo.recurring === "daily" ? "Quotidien" : "Hebdo"}</Badge>}
+                    {!todo.recurring && !todo.completed && todo.date < todayStr() && <Badge variant="red" className="text-[10px] px-1.5 py-0">En retard</Badge>}
                     {dl && (
                       <span className={cn("text-[10px] font-semibold flex items-center gap-1", dl.text)}>
                         <CalendarIcon size={10} /> {dl.label}

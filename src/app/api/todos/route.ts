@@ -14,6 +14,13 @@ export const GET = withAuth(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date") || todayStr();
   const todos = await getTodosForDate(db, userId, date);
+  // Sur la vue du jour, on remonte aussi les tâches ponctuelles non terminées des jours passés
+  if (date === todayStr()) {
+    const overdue = (await db.prepare(
+      "SELECT * FROM todos WHERE user_id = ? AND recurring IS NULL AND completed = 0 AND date < ? ORDER BY date ASC"
+    ).all(userId, date)) as any[];
+    return NextResponse.json([...overdue.map(t => ({ ...t, completed: false })), ...todos]);
+  }
   return NextResponse.json(todos);
 });
 

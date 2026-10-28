@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Flame, Droplets, Dumbbell, Moon, CheckSquare, Briefcase, TrendingUp, Quote, Zap, AlertTriangle, Calendar as CalendarIcon } from "lucide-react";
+import { Flame, Droplets, Dumbbell, Moon, CheckSquare, Briefcase, TrendingUp, Quote, Zap, AlertTriangle, Calendar as CalendarIcon, Circle } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import ProgressRing from "@/components/ui/ProgressRing";
 import Link from "next/link";
@@ -33,12 +33,19 @@ export default function DashboardClient() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = () =>
     fetch("/api/dashboard")
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+
+  useEffect(() => { load(); }, []);
+
+  const completeUrgentTask = async (id: number) => {
+    setData(d => d && { ...d, urgentTasks: d.urgentTasks?.filter(t => t.id !== id) });
+    await fetch(`/api/todos/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: true }) });
+    load();
+  };
 
   if (loading) return <DashboardSkeleton />;
   if (!data) return <div className="p-4 text-foreground-muted">Erreur de chargement</div>;
@@ -111,17 +118,24 @@ export default function DashboardClient() {
             {data.urgentTasks.map(t => {
               const dl = deadlineColor(t.deadline);
               return (
-                <Link key={t.id} href="/todos" className={cn(
-                  "flex items-center gap-3 p-2.5 rounded-xl border-2 transition-all cursor-pointer hover:scale-[1.01] active:scale-100",
+                <div key={t.id} className={cn(
+                  "flex items-center gap-3 p-2.5 rounded-xl border-2 transition-all",
                   dl?.border,
                   dl?.bg
                 )}>
-                  <CalendarIcon size={14} className={dl?.text} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{t.title}</p>
-                  </div>
-                  <span className={cn("text-xs font-bold", dl?.text)}>{dl?.label}</span>
-                </Link>
+                  <button
+                    onClick={() => completeUrgentTask(t.id)}
+                    className="flex-shrink-0 cursor-pointer active:scale-90 transition-transform"
+                    aria-label="Marquer complété"
+                  >
+                    <Circle size={20} className="text-muted hover:text-accent-green transition-colors" />
+                  </button>
+                  <Link href="/todos" className="flex-1 min-w-0 flex items-center gap-3">
+                    <p className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">{t.title}</p>
+                    <CalendarIcon size={14} className={dl?.text} />
+                    <span className={cn("text-xs font-bold", dl?.text)}>{dl?.label}</span>
+                  </Link>
+                </div>
               );
             })}
           </div>
