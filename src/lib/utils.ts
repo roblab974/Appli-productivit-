@@ -47,3 +47,9 @@ export function formatMoney(amount: number, currency: string = "EUR", compact = 
     : new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(amount);
   return `${value} ${sym}`;
 }
+
+// 6.33 → "6h20"
+export function formatHours(hours: number): string {
+  const total = Math.round(hours * 60);
+  return `${Math.floor(total / 60)}h${String(total % 60).padStart(2, "0")}`;
+}

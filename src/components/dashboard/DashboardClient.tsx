@@ -5,7 +5,7 @@ import { Flame, Droplets, Dumbbell, Moon, CheckSquare, Briefcase, TrendingUp, Qu
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import ProgressRing from "@/components/ui/ProgressRing";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, formatHours } from "@/lib/utils";
 import { deadlineColor } from "@/components/todos/TodosClient";
 
 interface DashboardData {
@@ -83,7 +83,7 @@ export default function DashboardClient() {
             <h2 className="font-heading text-lg font-bold mb-2">Score du jour</h2>
             <div className="space-y-1.5">
               <ScoreItem icon={Dumbbell} label="Workout" done={data.workout.done} value={data.workout.done ? "✓" : "—"} />
-              <ScoreItem icon={Moon} label="Sommeil" done={data.sleep.ok} value={data.sleep.data ? `${data.sleep.data.duration_h}h` : "—"} />
+              <ScoreItem icon={Moon} label="Sommeil" done={data.sleep.ok} value={data.sleep.data ? formatHours(data.sleep.data.duration_h) : "—"} />
               <ScoreItem icon={CheckSquare} label="Tâches" done={data.tasks.pct >= 75} value={`${data.tasks.pct}%`} />
               <ScoreItem icon={Droplets} label="Eau" done={data.water.ok} value={`${data.water.glasses}/${data.water.goal}`} />
             </div>

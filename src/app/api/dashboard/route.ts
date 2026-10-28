@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import getDb, { ensureSchema } from "@/lib/db";
 import { format, subDays, startOfWeek, endOfWeek, differenceInDays, parseISO } from "date-fns";
 import { getTodosForDate } from "@/lib/todos-helpers";
+import { verseOfDay } from "@/lib/bible-verses";
 import { requireUserId, withAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -54,9 +55,7 @@ export const GET = withAuth(async () => {
     else break;
   }
 
-  const quotes = await db.prepare("SELECT * FROM quotes").all();
-  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-  const quote = quotes.length > 0 ? quotes[dayOfYear % quotes.length] : { text: "Chaque jour est une nouvelle opportunité.", author: "Anonyme" };
+  const quote = verseOfDay(today);
 
   const [latestWeight, weekData, mainGoal] = await Promise.all([
     db.prepare("SELECT weight_kg FROM weight_logs WHERE user_id = ? ORDER BY date DESC LIMIT 1").get(userId),

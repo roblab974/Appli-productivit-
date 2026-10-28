@@ -15,7 +15,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { todayStr } from "@/lib/utils";
+import { todayStr, formatHours } from "@/lib/utils";
 
 type Tab = "sleep" | "weight" | "water";
 
@@ -28,10 +28,6 @@ function sleepDuration(bedtime: string, wakeTime: string): number {
   return Math.round((diff / 60) * 100) / 100;
 }
 
-function formatSleepDuration(hours: number): string {
-  const total = Math.round(hours * 60);
-  return `${Math.floor(total / 60)}h${String(total % 60).padStart(2, "0")}`;
-}
 
 export default function HealthClient() {
   const [tab, setTab] = useState<Tab>("sleep");
@@ -170,7 +166,7 @@ export default function HealthClient() {
     setShowWaterAdd(false);
   };
 
-  const avgSleep = sleepLogs.length > 0 ? (sleepLogs.reduce((s, l) => s + l.duration_h, 0) / sleepLogs.length).toFixed(1) : "—";
+  const avgSleep = sleepLogs.length > 0 ? formatHours(sleepLogs.reduce((s, l) => s + l.duration_h, 0) / sleepLogs.length) : "—";
   const avgQuality = sleepLogs.length > 0 ? (sleepLogs.reduce((s, l) => s + l.quality, 0) / sleepLogs.length).toFixed(1) : "—";
   const latestWeight = weightLogs.length > 0 ? weightLogs[weightLogs.length - 1] : null;
   const weightDiff = weightLogs.length > 1
@@ -218,7 +214,7 @@ export default function HealthClient() {
           <div className="grid grid-cols-2 gap-3">
             <Card className="text-center py-3">
               <Moon size={20} className="text-accent-purple mx-auto mb-1" />
-              <span className="font-heading text-2xl font-bold text-accent-purple">{avgSleep}h</span>
+              <span className="font-heading text-2xl font-bold text-accent-purple">{avgSleep}</span>
               <p className="text-[10px] text-foreground-muted mt-0.5">Moyenne</p>
             </Card>
             <Card className="text-center py-3">
@@ -239,7 +235,7 @@ export default function HealthClient() {
                   <XAxis dataKey="date" tickFormatter={d => format(parseISO(d), "dd/MM")} tick={{ fill: "#64748B", fontSize: 10 }} axisLine={false} tickLine={false} />
                   <YAxis domain={[4, 10]} tick={{ fill: "#64748B", fontSize: 10 }} axisLine={false} tickLine={false} />
                   <Tooltip contentStyle={{ background: "#0F172A", border: "1px solid #334155", borderRadius: 12, fontSize: 12 }}
-                    formatter={(v: any) => [`${v}h`, "Sommeil"]}
+                    formatter={(v: any) => [formatHours(v), "Sommeil"]}
                     labelFormatter={l => format(parseISO(l), "dd MMM", { locale: fr })} />
                   <ReferenceLine y={7} stroke="#22C55E" strokeDasharray="4 2" strokeOpacity={0.5} />
                   <Line type="monotone" dataKey="duration_h" stroke="#8B5CF6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#8B5CF6" }} />
@@ -276,7 +272,7 @@ export default function HealthClient() {
                   <div className="flex items-start gap-2">
                     <div className="text-right">
                       <span className={cn("font-heading text-xl font-bold", log.duration_h >= 7 ? "text-accent-green" : "text-accent-amber")}>
-                        {log.duration_h}h
+                        {formatHours(log.duration_h)}
                       </span>
                       <div className="flex justify-end mt-0.5">
                         <StarRating value={log.quality} size={12} />
@@ -595,7 +591,7 @@ export default function HealthClient() {
           </div>
           <div className="flex items-center justify-between bg-surface-2 rounded-xl px-3 py-2.5">
             <span className="text-sm font-medium text-foreground-muted">Durée</span>
-            <span className="font-heading text-lg font-bold text-accent-purple">{formatSleepDuration(sleepDuration(sleepForm.bedtime, sleepForm.wake_time))}</span>
+            <span className="font-heading text-lg font-bold text-accent-purple">{formatHours(sleepDuration(sleepForm.bedtime, sleepForm.wake_time))}</span>
           </div>
           <div>
             <label className="text-sm font-medium text-foreground-muted block mb-2">Qualité</label>
